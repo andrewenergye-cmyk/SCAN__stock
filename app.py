@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import datetime
+import os # 新增：用來檢查本機檔案是否存在
 
 # ==========================================
 # 核心指標計算函式
@@ -40,13 +41,13 @@ def yfinance_download_safe(symbol, start, end):
 # ==========================================
 st.set_page_config(page_title="多指標量化掃描工具", layout="wide", page_icon="📈")
 
-st.title("📈 多指標(W%R/RSI/KD)量化掃描工具 by 峰臣")
-st.markdown("將您的 CSV 股票清單上傳，系統將自動套用您的策略進行雲端運算。")
+st.title("📈 多指標 (W%R / RSI / KD) 量化掃描工具")
+st.markdown("將您的 CSV 股票清單上傳，系統將自動套用您的策略進行雲端運算。若未上傳，將自動載入預設清單。")
 
 # --- 側邊欄：檔案上傳與指標設定 ---
 with st.sidebar:
     st.header("📂 1. 資料來源")
-    uploaded_files = st.file_uploader("請上傳 CSV 檔案 (可多選)", accept_multiple_files=True, type=['csv'])
+    uploaded_files = st.file_uploader("請上傳 CSV 檔案 (可多選，若不選則載入預設檔)", accept_multiple_files=True, type=['csv'])
     
     st.header("⚙️ 2. 條件組合")
     col1, col2 = st.columns(2)
@@ -66,13 +67,11 @@ st.subheader("📊 4. 參數設定")
 
 if is_oversold:
     st.info("目前為 **模式 A (超賣)**：尋找指標 **小於(<)** 設定門檻的標的。")
-    # 超賣預設值
     def_wr_s_t, def_wr_l_t = -90.0, -80.0
     def_rsi_s_t, def_rsi_l_t = 25.0, 50.0
     def_kd_s_k, def_kd_s_d, def_kd_l_k, def_kd_l_d = 20.0, 20.0, 30.0, 30.0
 else:
     st.error("目前為 **模式 B (超買)**：尋找指標 **大於(>)** 設定門檻的標的。")
-    # 超買預設值
     def_wr_s_t, def_wr_l_t = -10.0, -20.0
     def_rsi_s_t, def_rsi_l_t = 80.0, 50.0
     def_kd_s_k, def_kd_s_d, def_kd_l_k, def_kd_l_d = 80.0, 80.0, 70.0, 70.0
@@ -113,11 +112,11 @@ st.divider()
 # 掃描執行區
 # ==========================================
 if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
-    if not uploaded_files:
-        st.warning("⚠️ 請先在左側欄位上傳至少一個 CSV 檔案！")
-    else:
-        # 解析上傳的 CSV 檔案
-        parsed_data = []
+    
+    dataframes = [] # 用來統一存放讀取到的資料表
+    
+    # 💡 新增邏輯：判斷要用上傳的檔案，還是預設檔案
+    if uploaded_files:
         for file in uploaded_files:
             try:
                 try:
@@ -125,34 +124,51 @@ if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
                 except UnicodeDecodeError:
                     file.seek(0)
                     df = pd.read_csv(file, encoding='big5', dtype=str)
-                
-                df.columns = [str(col).strip() for col in df.columns]
-                
-                if '代號' in df.columns:
-                    for index, row in df.iterrows():
-                        symbol = str(row['代號']).strip()
-                        if symbol.endswith('.0'): symbol = symbol[:-2]
-                        if not symbol or symbol.lower() == 'nan': continue
-                        
-                        # ETF 防呆：自動補零
-                        if symbol.isdigit() and len(symbol) < 4:
-                            symbol = "00" + symbol
-                            
-                        market = str(row.get('市場', '')).strip()
-                        name = str(row.get('名稱', '')).strip()
-                        if name.lower() == 'nan': name = ""
-                        
-                        yf_symbol = f"{symbol}.TWO" if '櫃' in market else f"{symbol}.TW"
-                        
-                        parsed_data.append({
-                            "clean_symbol": symbol,
-                            "yf_symbol": yf_symbol,
-                            "name": name
-                        })
+                dataframes.append(df)
             except Exception as e:
                 st.error(f"讀取檔案 {file.name} 失敗：{e}")
+    else:
+        # 如果沒有上傳檔案，尋找同資料夾下的 default_stocks.csv
+        default_file = "default_stocks.csv"
+        if os.path.exists(default_file):
+            st.info(f"📂 未偵測到手動上傳，已自動載入預設清單：`{default_file}`")
+            try:
+                try:
+                    df = pd.read_csv(default_file, encoding='utf-8-sig', dtype=str)
+                except UnicodeDecodeError:
+                    df = pd.read_csv(default_file, encoding='big5', dtype=str)
+                dataframes.append(df)
+            except Exception as e:
+                st.error(f"預設檔案讀取失敗：{e}")
+        else:
+            st.warning("⚠️ 請先在左側欄位上傳 CSV 檔案，或在程式資料夾放入 `default_stocks.csv` 作為預設檔。")
 
-        # 去重複標的
+    # 如果有成功讀取到任何資料表，就開始解析代號
+    if dataframes:
+        parsed_data = []
+        for df in dataframes:
+            df.columns = [str(col).strip() for col in df.columns]
+            if '代號' in df.columns:
+                for index, row in df.iterrows():
+                    symbol = str(row['代號']).strip()
+                    if symbol.endswith('.0'): symbol = symbol[:-2]
+                    if not symbol or symbol.lower() == 'nan': continue
+                    
+                    if symbol.isdigit() and len(symbol) < 4:
+                        symbol = "00" + symbol
+                        
+                    market = str(row.get('市場', '')).strip()
+                    name = str(row.get('名稱', '')).strip()
+                    if name.lower() == 'nan': name = ""
+                    
+                    yf_symbol = f"{symbol}.TWO" if '櫃' in market else f"{symbol}.TW"
+                    
+                    parsed_data.append({
+                        "clean_symbol": symbol,
+                        "yf_symbol": yf_symbol,
+                        "name": name
+                    })
+
         unique_targets = {d['yf_symbol']: d for d in parsed_data}
         targets_list = list(unique_targets.values())
         
@@ -163,7 +179,7 @@ if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
         if not all_three and len(req_inds) == 0:
             st.error("⚠️ 請至少在左側下拉選單選擇一個分析指標，或是勾選「三者同時符合」。")
         elif not targets_list:
-             st.warning("⚠️ 讀取不到任何有效的股票代號，請檢查 CSV 格式。")
+             st.warning("⚠️ 讀取不到任何有效的股票代號，請檢查 CSV 格式是否有「代號」欄位。")
         else:
             end_date = datetime.date.today()
             max_days = max(wr_s_d, wr_l_d, rsi_s_d, rsi_l_d, kd_s_d, kd_l_d)
@@ -185,7 +201,6 @@ if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
                 try:
                     df = yfinance_download_safe(symbol_yf, start=start_date, end=end_date)
                     
-                    # 智慧重試：長度4碼且純數字，找不到資料就當作被砍掉的ETF補00重試
                     if (df.empty or len(df) < max_days) and len(symbol_clean) == 4 and symbol_clean.isdigit():
                         alt_clean = "00" + symbol_clean
                         alt_yf = f"{alt_clean}.TWO" if ".TWO" in symbol_yf else f"{alt_clean}.TW"
@@ -254,7 +269,6 @@ if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
                 st.success(f"🎉 掃描完成！共找到 {len(results)} 檔符合條件的標的：")
                 df_results = pd.DataFrame(results)
                 
-                # 使用 Streamlit 原生的 LinkColumn 將網址轉化為可點擊的按鈕
                 st.dataframe(
                     df_results,
                     column_config={
