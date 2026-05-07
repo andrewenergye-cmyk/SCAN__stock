@@ -2,7 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import datetime
-import os # 新增：用來檢查本機檔案是否存在
+import os
 
 # ==========================================
 # 核心指標計算函式
@@ -41,7 +41,7 @@ def yfinance_download_safe(symbol, start, end):
 # ==========================================
 st.set_page_config(page_title="多指標量化掃描工具", layout="wide", page_icon="📈")
 
-st.title("📈 多指標 (W%R / RSI / KD) 量化掃描工具")
+st.title("📈 多指標(W%R/RSI/KD)量化掃描工具 by峰臣")
 st.markdown("將您的 CSV 股票清單上傳，系統將自動套用您的策略進行雲端運算。若未上傳，將自動載入預設清單。")
 
 # --- 側邊欄：檔案上傳與指標設定 ---
@@ -52,7 +52,8 @@ with st.sidebar:
     st.header("⚙️ 2. 條件組合")
     col1, col2 = st.columns(2)
     with col1:
-        ind1 = st.selectbox("指標一", ["無選擇", "威廉", "RSI", "KD"])
+        # 🛠️ 修改 1：加入 index=1，讓預設選項變成陣列第二個 ("威廉")
+        ind1 = st.selectbox("指標一", ["無選擇", "威廉", "RSI", "KD"], index=1)
     with col2:
         ind2 = st.selectbox("指標二", ["無選擇", "威廉", "RSI", "KD"])
         
@@ -67,7 +68,8 @@ st.subheader("📊 4. 參數設定")
 
 if is_oversold:
     st.info("目前為 **模式 A (超賣)**：尋找指標 **小於(<)** 設定門檻的標的。")
-    def_wr_s_t, def_wr_l_t = -90.0, -80.0
+    # 🛠️ 修改 2：將 def_wr_l_t 從 -80.0 改為 -60.0
+    def_wr_s_t, def_wr_l_t = -90.0, -60.0
     def_rsi_s_t, def_rsi_l_t = 25.0, 50.0
     def_kd_s_k, def_kd_s_d, def_kd_l_k, def_kd_l_d = 20.0, 20.0, 30.0, 30.0
 else:
@@ -113,9 +115,8 @@ st.divider()
 # ==========================================
 if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
     
-    dataframes = [] # 用來統一存放讀取到的資料表
+    dataframes = [] 
     
-    # 💡 新增邏輯：判斷要用上傳的檔案，還是預設檔案
     if uploaded_files:
         for file in uploaded_files:
             try:
@@ -128,7 +129,6 @@ if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
             except Exception as e:
                 st.error(f"讀取檔案 {file.name} 失敗：{e}")
     else:
-        # 如果沒有上傳檔案，尋找同資料夾下的 default_stocks.csv
         default_file = "default_stocks.csv"
         if os.path.exists(default_file):
             st.info(f"📂 未偵測到手動上傳，已自動載入預設清單：`{default_file}`")
@@ -143,7 +143,6 @@ if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
         else:
             st.warning("⚠️ 請先在左側欄位上傳 CSV 檔案，或在程式資料夾放入 `default_stocks.csv` 作為預設檔。")
 
-    # 如果有成功讀取到任何資料表，就開始解析代號
     if dataframes:
         parsed_data = []
         for df in dataframes:
