@@ -156,7 +156,7 @@ def send_results_email(results_list):
 # ==========================================
 # 4. Streamlit UI 介面
 # ==========================================
-st.set_page_config(page_title="多指標量化掃描工具", layout="wide", page_icon="📈")
+st.set_page_config(page_title="多指標量化掃描工具by峰臣", layout="wide", page_icon="📈")
 
 # 初始化 Session State
 if 'results' not in st.session_state: st.session_state['results'] = []
