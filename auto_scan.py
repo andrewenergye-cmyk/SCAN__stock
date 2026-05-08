@@ -56,6 +56,26 @@ def main():
         yf_symbol = f"{symbol}.TWO" if '櫃' in market else f"{symbol}.TW"
         targets.append({"clean": symbol, "yf": yf_symbol, "name": name})
 
+    # --- 💡 新增：讀取雲端連動的策略參數 ---
+    try:
+        with open("strategy_config.json", "r") as f:
+            config = json.load(f)
+            print("✅ 成功讀取自訂策略參數檔！")
+    except:
+        print("⚠️ 找不到自訂參數檔，使用系統預設值。")
+        config = {}
+
+    # 套用參數 (如果 JSON 裡沒有，就退回後面的預設值)
+    wr_s_d = config.get("wr_s_d", 7)
+    wr_s_t = config.get("wr_s_t", -90.0)
+    wr_l_d = config.get("wr_l_d", 30)
+    wr_l_t = config.get("wr_l_t", -60.0)
+    
+    end_date = datetime.date.today()
+    start_date = end_date - datetime.timedelta(days=150)
+    
+    results = []
+    
     # --- 掃描參數設定 (此處預設為超賣模式，威廉小於-60) ---
     wr_s_d, wr_s_t = 7, -90.0
     wr_l_d, wr_l_t = 30, -60.0
