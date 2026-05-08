@@ -104,19 +104,21 @@ def main():
             # 計算當下收盤價
             current_price = float(df['Close'].iloc[-1])
 
-            # --- 判斷超賣 (Oversold) ---
+# --- 判斷超賣 (Oversold) ---
             v_wr_s_os = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(os_wr_s_d)).iloc[-1])
             v_wr_l_os = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(os_wr_l_d)).iloc[-1])
             if v_wr_s_os < float(os_wr_s_t) and v_wr_l_os < float(os_wr_l_t):
-                os_results.append(f"<li><b>{stock['clean']} {stock['name']}</b> - 收盤: {current_price:.2f} | 短W%R: {v_wr_s_os:.2f} | 長W%R: {v_wr_l_os:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
-                print(f"  👉 [符合超賣] {stock['clean']}")
+                # 💡 這裡把收盤價特別加粗並標上藍色字體與圖示
+                os_results.append(f"<li style='margin-bottom: 8px; font-size: 16px;'><b>{stock['clean']} {stock['name']}</b> ➔ 💰 <b style='color: blue;'>收盤價: {current_price:.2f}</b> | 短W%R: {v_wr_s_os:.2f} | 長W%R: {v_wr_l_os:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
+                print(f"  👉 [符合超賣/弱勢/低點] {stock['clean']}")
 
-            # --- 判斷超買 (Overbought) ---
+# --- 判斷超買 (Overbought) ---
             v_wr_s_ob = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(ob_wr_s_d)).iloc[-1])
             v_wr_l_ob = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(ob_wr_l_d)).iloc[-1])
             if v_wr_s_ob > float(ob_wr_s_t) and v_wr_l_ob > float(ob_wr_l_t):
-                ob_results.append(f"<li><b>{stock['clean']} {stock['name']}</b> - 收盤: {current_price:.2f} | 短W%R: {v_wr_s_ob:.2f} | 長W%R: {v_wr_l_ob:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
-                print(f"  👉 [符合超買] {stock['clean']}")
+                # 💡 這裡把收盤價特別加粗並標上藍色字體與圖示
+                ob_results.append(f"<li style='margin-bottom: 8px; font-size: 16px;'><b>{stock['clean']} {stock['name']}</b> ➔ 💰 <b style='color: blue;'>收盤價: {current_price:.2f}</b> | 短W%R: {v_wr_s_ob:.2f} | 長W%R: {v_wr_l_ob:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
+                print(f"  👉 [符合超買/強勢/高點] {stock['clean']}")
 
         except Exception as e:
             pass # 忽略異常標的
