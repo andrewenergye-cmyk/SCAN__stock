@@ -7,7 +7,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import json
-from github import Github  # 確保 requirements.txt 有加入 PyGithub
+from github import Github, GithubException
 
 # --- 設定檔名稱 ---
 CONFIG_FILE = "strategy_config.json"
@@ -69,7 +69,7 @@ def load_config():
     return defaults
 
 def save_config_to_github(full_config):
-    """將完整設定檔同步至 GitHub"""
+    """將完整設定檔同步至 GitHub (升級版：智慧防錯機制)"""
     with open(CONFIG_FILE, "w") as f:
         json.dump(full_config, f, indent=4)
         
@@ -83,12 +83,28 @@ def save_config_to_github(full_config):
         g = Github(token)
         repo = g.get_repo(repo_name)
         content_str = json.dumps(full_config, indent=4)
+        
         try:
+            # 1. 先嘗試讀取雲端現有的檔案
             contents = repo.get_contents(CONFIG_FILE)
-            repo.update_file(contents.path, "Update strategy parameters via Streamlit", content_str, contents.sha)
-        except:
-            repo.create_file(CONFIG_FILE, "Initial strategy config", content_str)
-        return True, "✅ 參數已成功同步至 GitHub！"
+            
+            # 2. 智慧比對：如果內容完全沒變，就不用麻煩 GitHub 伺服器了
+            if contents.decoded_content.decode('utf-8') == content_str:
+                return True, "✅ 參數未更動，雲端已是最新的！"
+                
+            # 3. 內容有變更，執行更新 (這時我們乖乖附上 contents.sha 給它)
+            repo.update_file(contents.path, "Update strategy parameters", content_str, contents.sha)
+            return True, "✅ 參數已成功更新並同步至 GitHub！"
+            
+        except GithubException as e:
+            # 4. 狀態碼 404 代表檔案「真的不存在」，這時才允許建立新檔案
+            if e.status == 404:
+                repo.create_file(CONFIG_FILE, "Initial strategy config", content_str)
+                return True, "✅ 首次建立參數檔並成功同步至 GitHub！"
+            else:
+                # 攔截其他的 API 錯誤
+                raise e
+                
     except Exception as e:
         return False, f"❌ GitHub 同步失敗: {e}"
 
