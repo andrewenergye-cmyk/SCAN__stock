@@ -16,7 +16,7 @@ def calculate_williams_r(high, low, close, period):
     return ((highest_high - close) / (highest_high - lowest_low)) * -100
 
 def main():
-    print("🤖 啟動每日自動量化掃描腳本...")
+    print("🤖 啟動每日自動量化掃描腳本 (超賣/超買雙向掃描)...")
     default_file = "default_stocks.csv"
     
     # 檢查名單是否存在
@@ -50,42 +50,46 @@ def main():
         return
 
     # ==========================================
-    # 2. 讀取雲端連動的策略參數 (針對「超賣」模式)
+    # 2. 讀取雲端連動的策略參數 (同時讀取雙模式)
     # ==========================================
     config_file = "strategy_config.json"
+    full_config = {}
     try:
-        with open(config_file, "r") as f:
-            full_config = json.load(f)
-            # 指定抓取 "oversold" (超賣) 的參數包
-            config = full_config.get("oversold", {}) 
-            print("✅ 成功讀取 GitHub 雲端策略參數 (超賣模式)！")
+        if os.path.exists(config_file):
+            with open(config_file, "r") as f:
+                full_config = json.load(f)
+            print("✅ 成功讀取 GitHub 雲端策略參數！")
     except Exception as e:
-        print(f"⚠️ 找不到自訂參數檔 ({e})，將使用系統預設值。")
-        config = {}
+        print(f"⚠️ 讀取參數檔失敗 ({e})，將使用系統預設值。")
 
-    # 套用參數 (若無自訂值，則給予預設值)
-    wr_s_d = config.get("wr_s_d", 7)
-    wr_s_t = config.get("wr_s_t", -90.0)
-    wr_l_d = config.get("wr_l_d", 30)
-    wr_l_t = config.get("wr_l_t", -60.0)
+    # 超賣參數 (Oversold)
+    os_cfg = full_config.get("oversold", {})
+    os_wr_s_d, os_wr_s_t = os_cfg.get("wr_s_d", 7), os_cfg.get("wr_s_t", -90.0)
+    os_wr_l_d, os_wr_l_t = os_cfg.get("wr_l_d", 30), os_cfg.get("wr_l_t", -60.0)
+
+    # 超買參數 (Overbought)
+    ob_cfg = full_config.get("overbought", {})
+    ob_wr_s_d, ob_wr_s_t = ob_cfg.get("wr_s_d", 7), ob_cfg.get("wr_s_t", -10.0)
+    ob_wr_l_d, ob_wr_l_t = ob_cfg.get("wr_l_d", 30), ob_cfg.get("wr_l_t", -20.0)
     
-    print(f"📊 今日掃描條件：短W%R({wr_s_d}天) < {wr_s_t} 且 長W%R({wr_l_d}天) < {wr_l_t}")
+    print(f"📊 【超賣條件】短W%R({os_wr_s_d}天) < {os_wr_s_t} 且 長W%R({os_wr_l_d}天) < {os_wr_l_t}")
+    print(f"📊 【超買條件】短W%R({ob_wr_s_d}天) > {ob_wr_s_t} 且 長W%R({ob_wr_l_d}天) > {ob_wr_l_t}")
 
     # ==========================================
     # 3. 開始執行掃描
     # ==========================================
     end_date = datetime.date.today()
-    # 往前多抓一些天數以利計算長天期指標
     start_date = end_date - datetime.timedelta(days=150) 
     
-    results = []
+    os_results = [] # 存放超賣名單
+    ob_results = [] # 存放超買名單
     
     for stock in targets:
         try:
             print(f"掃描中: {stock['clean']} {stock['name']}")
             df = yf.Ticker(stock['yf']).history(start=start_date, end=end_date)
             
-            # 智慧重試 (針對被砍掉 .TWO/.TW 尾碼的純數字 ETF)
+            # 智慧重試 (針對 ETF)
             if (df.empty or len(df) < 30) and len(stock['clean']) == 4 and stock['clean'].isdigit():
                 alt_clean = "00" + stock['clean']
                 alt_yf = f"{alt_clean}.TWO" if ".TWO" in stock['yf'] else f"{alt_clean}.TW"
@@ -97,38 +101,46 @@ def main():
             if df.empty or len(df) < 30: 
                 continue
             
-            # 計算威廉指標
-            df['WR_S'] = calculate_williams_r(df['High'], df['Low'], df['Close'], int(wr_s_d))
-            df['WR_L'] = calculate_williams_r(df['High'], df['Low'], df['Close'], int(wr_l_d))
-            
-            latest = df.iloc[-1]
-            v_wr_s, v_wr_l = float(latest['WR_S']), float(latest['WR_L'])
-            current_price = float(latest['Close'])
-            
-            # 判斷是否符合條件
-            if v_wr_s < float(wr_s_t) and v_wr_l < float(wr_l_t):
-                results.append(f"<li><b>{stock['clean']} {stock['name']}</b> - 收盤: {current_price:.2f} | 短W%R: {v_wr_s:.2f} | 長W%R: {v_wr_l:.2f}</li>")
-                print(f"  👉 [符合條件] {stock['clean']}")
+            # 計算當下收盤價
+            current_price = float(df['Close'].iloc[-1])
+
+            # --- 判斷超賣 (Oversold) ---
+            v_wr_s_os = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(os_wr_s_d)).iloc[-1])
+            v_wr_l_os = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(os_wr_l_d)).iloc[-1])
+            if v_wr_s_os < float(os_wr_s_t) and v_wr_l_os < float(os_wr_l_t):
+                os_results.append(f"<li><b>{stock['clean']} {stock['name']}</b> - 收盤: {current_price:.2f} | 短W%R: {v_wr_s_os:.2f} | 長W%R: {v_wr_l_os:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
+                print(f"  👉 [符合超賣] {stock['clean']}")
+
+            # --- 判斷超買 (Overbought) ---
+            v_wr_s_ob = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(ob_wr_s_d)).iloc[-1])
+            v_wr_l_ob = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(ob_wr_l_d)).iloc[-1])
+            if v_wr_s_ob > float(ob_wr_s_t) and v_wr_l_ob > float(ob_wr_l_t):
+                ob_results.append(f"<li><b>{stock['clean']} {stock['name']}</b> - 收盤: {current_price:.2f} | 短W%R: {v_wr_s_ob:.2f} | 長W%R: {v_wr_l_ob:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
+                print(f"  👉 [符合超買] {stock['clean']}")
+
         except Exception as e:
-            pass # 忽略抓不到資料的廢棄股票
+            pass # 忽略異常標的
 
     # ==========================================
-    # 4. 寄發 Email 邏輯
+    # 4. 寄發 Email 邏輯 (整合雙模式)
     # ==========================================
-# ==========================================
-    # 4. 寄發 Email 邏輯 (區分標題為超賣)
-    # ==========================================
-    mode_text = "超賣 (局勢低點)"
+    html_content = f"<h2>📈 每日台股量化掃描通報 ({end_date.strftime('%Y-%m-%d')})</h2>"
     
-    if not results:
-        html_content = f"<h3>本日【{mode_text}】量化掃描完成</h3><p>今日無符合設定條件的標的。</p>"
+    # 綠色區塊：超賣 (買點)
+    html_content += "<h3 style='color: green;'>🟢 超賣 (指標波段低點) 符合標的：</h3>"
+    if not os_results:
+        html_content += "<p>今日無符合條件標的。</p>"
     else:
-        html_content = f"<h3>本日【{mode_text}】量化掃描完成，共 {len(results)} 檔符合條件：</h3><ul>" + "".join(results) + "</ul>"
-        html_content += "<br><p>前往 Yahoo 股市查看：</p><ul>"
-        for stock_html in results:
-             symbol = stock_html.split("<b>")[1].split(" ")[0]
-             html_content += f'<li><a href="https://tw.stock.yahoo.com/quote/{symbol}">{symbol} 資訊</a></li>'
-        html_content += "</ul>"
+        html_content += f"<ul>{''.join(os_results)}</ul>"
+        
+    html_content += "<hr>"
+
+    # 紅色區塊：超買 (賣點)
+    html_content += "<h3 style='color: red;'>🔴 超買 (指標波段高點) 符合標的：</h3>"
+    if not ob_results:
+        html_content += "<p>今日無符合條件標的。</p>"
+    else:
+        html_content += f"<ul>{''.join(ob_results)}</ul>"
 
     # 從環境變數取得金鑰
     sender_email = os.environ.get("SENDER_EMAIL")
@@ -142,8 +154,7 @@ def main():
     receiver_list = [email.strip() for email in receiver_email.split(",")]
 
     msg = MIMEMultipart("alternative")
-    # 💡 信件標題加上超賣字眼
-    msg['Subject'] = f"📈 每日台股量化掃描通報 - {mode_text} ({end_date.strftime('%Y-%m-%d')})"
+    msg['Subject'] = f"📈 每日雙向掃描報告：超賣 {len(os_results)} 檔 / 超買 {len(ob_results)} 檔"
     msg['From'] = sender_email
     msg['To'] = receiver_email
     msg.attach(MIMEText(html_content, 'html'))
@@ -153,7 +164,7 @@ def main():
         server.login(sender_email, app_password)
         server.sendmail(sender_email, receiver_list, msg.as_string())
         server.quit()
-        print(f"✅ 掃描結果信件發送成功！已寄送至：{receiver_email}")
+        print(f"✅ 雙向掃描結果信件發送成功！已寄送至：{receiver_email}")
     except Exception as e:
         print(f"❌ 寄信失敗: {e}")
 
