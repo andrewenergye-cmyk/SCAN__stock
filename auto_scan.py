@@ -143,6 +143,7 @@ def main():
         html_content += f"<ul>{''.join(ob_results)}</ul>"
 
     # 從環境變數取得金鑰
+# 從環境變數取得金鑰
     sender_email = os.environ.get("SENDER_EMAIL")
     app_password = os.environ.get("APP_PASSWORD")
     receiver_email = os.environ.get("RECEIVER_EMAIL")
@@ -151,12 +152,17 @@ def main():
         print("❌ 未設定 Email 環境變數 (Secrets)，跳過寄信階段。")
         return
 
-    receiver_list = [email.strip() for email in receiver_email.split(",")]
+    # 💡 防呆升級：強制替換全形逗號與分號，並自動過濾空白
+    clean_receivers = receiver_email.replace("，", ",").replace(";", ",")
+    receiver_list = [e.strip() for e in clean_receivers.split(",") if e.strip()]
 
     msg = MIMEMultipart("alternative")
     msg['Subject'] = f"📈 每日雙向掃描報告：超賣 {len(os_results)} 檔 / 超買 {len(ob_results)} 檔"
     msg['From'] = sender_email
-    msg['To'] = receiver_email
+    
+    # 💡 使用重新組合好的乾淨字串作為標頭
+    msg['To'] = ", ".join(receiver_list) 
+    
     msg.attach(MIMEText(html_content, 'html'))
 
     try:
