@@ -94,7 +94,7 @@ def main():
         except Exception as e:
             pass
 
-    # --- 寄發 Email 邏輯 ---
+# --- 寄發 Email 邏輯 ---
     if not results:
         html_content = "<h3>本日量化掃描完成</h3><p>今日無符合「威廉指標超賣」條件的標的。</p>"
     else:
@@ -109,23 +109,32 @@ def main():
     app_password = os.environ.get("APP_PASSWORD")
     receiver_email = os.environ.get("RECEIVER_EMAIL")
 
-    if not sender_email or not app_password:
+    if not sender_email or not app_password or not receiver_email:
         print("未設定 Email 環境變數，跳過寄信階段。")
         print(html_content)
         return
 
+    # 💡 新增邏輯：將用逗號隔開的多個信箱，轉換成 Python 陣列名單
+    receiver_list = [email.strip() for email in receiver_email.split(",")]
+
     msg = MIMEMultipart("alternative")
     msg['Subject'] = f"📈 每日台股量化掃描通報 ({end_date.strftime('%Y-%m-%d')})"
     msg['From'] = sender_email
-    msg['To'] = receiver_email
+    
+    # 信件標頭的收件者顯示 (多個人可以用逗號連在一起顯示)
+    msg['To'] = receiver_email 
+    
     msg.attach(MIMEText(html_content, 'html'))
 
     try:
         server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
         server.login(sender_email, app_password)
-        server.sendmail(sender_email, receiver_email, msg.as_string())
+        
+        # 寄信指令：這裡必須傳入 receiver_list (名單陣列)，才能正確派發給所有人
+        server.sendmail(sender_email, receiver_list, msg.as_string())
+        
         server.quit()
-        print("✅ 掃描結果信件發送成功！")
+        print(f"✅ 掃描結果信件發送成功！已寄送至：{receiver_email}")
     except Exception as e:
         print(f"❌ 寄信失敗: {e}")
 
