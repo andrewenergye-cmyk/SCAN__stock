@@ -115,17 +115,22 @@ def main():
     # ==========================================
     # 4. 寄發 Email 邏輯
     # ==========================================
+# ==========================================
+    # 4. 寄發 Email 邏輯 (區分標題為超賣)
+    # ==========================================
+    mode_text = "超賣 (局勢低點)"
+    
     if not results:
-        html_content = "<h3>本日量化掃描完成</h3><p>今日無符合「威廉指標超賣」設定條件的標的。</p>"
+        html_content = f"<h3>本日【{mode_text}】量化掃描完成</h3><p>今日無符合設定條件的標的。</p>"
     else:
-        html_content = f"<h3>本日量化掃描完成，共 {len(results)} 檔符合條件：</h3><ul>" + "".join(results) + "</ul>"
+        html_content = f"<h3>本日【{mode_text}】量化掃描完成，共 {len(results)} 檔符合條件：</h3><ul>" + "".join(results) + "</ul>"
         html_content += "<br><p>前往 Yahoo 股市查看：</p><ul>"
         for stock_html in results:
              symbol = stock_html.split("<b>")[1].split(" ")[0]
              html_content += f'<li><a href="https://tw.stock.yahoo.com/quote/{symbol}">{symbol} 資訊</a></li>'
         html_content += "</ul>"
 
-    # 從環境變數 (GitHub Secrets) 取得金鑰
+    # 從環境變數取得金鑰
     sender_email = os.environ.get("SENDER_EMAIL")
     app_password = os.environ.get("APP_PASSWORD")
     receiver_email = os.environ.get("RECEIVER_EMAIL")
@@ -134,19 +139,18 @@ def main():
         print("❌ 未設定 Email 環境變數 (Secrets)，跳過寄信階段。")
         return
 
-    # 將逗號隔開的多個信箱轉換為 Python 陣列
     receiver_list = [email.strip() for email in receiver_email.split(",")]
 
     msg = MIMEMultipart("alternative")
-    msg['Subject'] = f"📈 每日台股量化掃描通報 ({end_date.strftime('%Y-%m-%d')})"
+    # 💡 信件標題加上超賣字眼
+    msg['Subject'] = f"📈 每日台股量化掃描通報 - {mode_text} ({end_date.strftime('%Y-%m-%d')})"
     msg['From'] = sender_email
-    msg['To'] = receiver_email  # 這裡放字串讓收件人欄位顯示所有人
+    msg['To'] = receiver_email
     msg.attach(MIMEText(html_content, 'html'))
 
     try:
         server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
         server.login(sender_email, app_password)
-        # 這裡放入 receiver_list 陣列，確保每個人都收到
         server.sendmail(sender_email, receiver_list, msg.as_string())
         server.quit()
         print(f"✅ 掃描結果信件發送成功！已寄送至：{receiver_email}")
