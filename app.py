@@ -171,7 +171,10 @@ with st.sidebar:
         else:
             with st.spinner('發送中...'):
                 ok, m = send_results_email(st.session_state['results'])
-                st.success(m) if ok else st.error(m)
+                if ok:
+                    st.success(m)
+                else:
+                    st.error(m)
 
 # 參數設定區
 st.subheader("📊 4. 參數設定")
@@ -217,9 +220,12 @@ if st.button(f"💾 儲存【{'超賣' if is_oversold else '超買'}】參數並
         "kd_s_d": int(kd_s_d), "kd_s_k": float(kd_s_k), "kd_s_d_th": float(kd_s_d_th),
         "kd_l_d": int(kd_l_d), "kd_l_k": float(kd_l_k), "kd_l_d_th": float(kd_l_d_th)
     }
-    with st.spinner("同步中..."):
+      with st.spinner("同步中..."):
         ok, msg = save_config_to_github(current_config)
-        st.success(msg) if ok else st.warning(msg)
+        if ok:
+            st.success(msg)
+        else:
+            st.warning(msg)
 
 st.divider()
 
