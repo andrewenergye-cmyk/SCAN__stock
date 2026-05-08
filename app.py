@@ -3,6 +3,9 @@ import yfinance as yf
 import pandas as pd
 import datetime
 import os
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # ==========================================
 # 核心指標計算函式
@@ -37,12 +40,62 @@ def yfinance_download_safe(symbol, start, end):
     return df
 
 # ==========================================
+# 寄發 Email 專用函式
+# ==========================================
+def send_results_email(results_list):
+    """將掃描結果發送至設定的信箱"""
+    end_date = datetime.date.today()
+    
+    if not results_list:
+        html_content = "<h3>本日量化掃描完成</h3><p>本次手動測試掃描，無符合目前設定條件的標的。</p>"
+    else:
+        html_content = f"<h3>手動量化掃描測試完成，共 {len(results_list)} 檔符合條件：</h3><ul>"
+        for res in results_list:
+            html_content += f"<li><b>{res['代號']} {res['名稱']}</b> - 收盤: {res['收盤價']} | 短W%R: {res['短W%R']} | 長W%R: {res['長W%R']}</li>"
+        html_content += "</ul><br><p>前往 Yahoo 股市查看：</p><ul>"
+        
+        for res in results_list:
+            html_content += f'<li><a href="{res["Yahoo資訊"]}">{res["代號"]} 資訊</a></li>'
+        html_content += "</ul>"
+
+    # 讀取環境變數 (請確保您在終端機或雲端有設定好)
+    sender_email = os.environ.get("SENDER_EMAIL")
+    app_password = os.environ.get("APP_PASSWORD")
+    receiver_email = os.environ.get("RECEIVER_EMAIL")
+
+    if not sender_email or not app_password or not receiver_email:
+        return False, "❌ 環境變數 (SENDER_EMAIL / APP_PASSWORD / RECEIVER_EMAIL) 未設定，請檢查設定檔或終端機變數。"
+
+    receiver_list = [email.strip() for email in receiver_email.split(",")]
+
+    msg = MIMEMultipart("alternative")
+    msg['Subject'] = f"📈 台股量化掃描測試通報 ({end_date.strftime('%Y-%m-%d %H:%M')})"
+    msg['From'] = sender_email
+    msg['To'] = receiver_email 
+    msg.attach(MIMEText(html_content, 'html'))
+
+    try:
+        server = smtplib.SMTP_SSL("smtp.gmail.com", 465)
+        server.login(sender_email, app_password)
+        server.sendmail(sender_email, receiver_list, msg.as_string())
+        server.quit()
+        return True, f"✅ 掃描結果信件發送成功！已寄送至：\n{receiver_email}"
+    except Exception as e:
+        return False, f"❌ 寄信失敗: {e}"
+
+# ==========================================
 # 網頁介面與邏輯 (Streamlit)
 # ==========================================
 st.set_page_config(page_title="多指標量化掃描工具", layout="wide", page_icon="📈")
 
-st.title("📈 多指標(W%R/RSI/KD)量化掃描工具 by峰臣")
+st.title("📈 多指標(W%R/RSI/KD)量化掃描工具by峰臣")
 st.markdown("將您的 CSV 股票清單上傳，系統將自動套用您的策略進行雲端運算。若未上傳，將自動載入預設清單。")
+
+# 用 session_state 保存目前的掃描結果，以便獨立寄信使用
+if 'latest_results' not in st.session_state:
+    st.session_state['latest_results'] = []
+if 'has_scanned' not in st.session_state:
+    st.session_state['has_scanned'] = False
 
 # --- 側邊欄：檔案上傳與指標設定 ---
 with st.sidebar:
@@ -52,7 +105,6 @@ with st.sidebar:
     st.header("⚙️ 2. 條件組合")
     col1, col2 = st.columns(2)
     with col1:
-        # 🛠️ 修改 1：加入 index=1，讓預設選項變成陣列第二個 ("威廉")
         ind1 = st.selectbox("指標一", ["無選擇", "威廉", "RSI", "KD"], index=1)
     with col2:
         ind2 = st.selectbox("指標二", ["無選擇", "威廉", "RSI", "KD"])
@@ -62,13 +114,28 @@ with st.sidebar:
     st.header("🎯 3. 掃描模式")
     scan_mode = st.radio("請選擇策略方向", ["超賣 (低於門檻)", "超買 (高於門檻)"])
     is_oversold = (scan_mode == "超賣 (低於門檻)")
+    
+    st.divider()
+    
+    # 💡 新增區塊：發送 Email 按鈕
+    st.header("✉️ 測試發送 Email")
+    st.write("點擊下方按鈕，將目前畫面上的掃描結果發送至設定的信箱。")
+    if st.button("發送掃描結果信件", use_container_width=True):
+        if not st.session_state['has_scanned']:
+            st.warning("請先點擊主畫面的「🚀 開始掃描」獲取結果後再寄信。")
+        else:
+            with st.spinner('正在連線 Gmail 伺服器發送信件...'):
+                success, msg = send_results_email(st.session_state['latest_results'])
+                if success:
+                    st.success(msg)
+                else:
+                    st.error(msg)
 
 # --- 主畫面：參數設定區 ---
 st.subheader("📊 4. 參數設定")
 
 if is_oversold:
     st.info("目前為 **模式 A (超賣)**：尋找指標 **小於(<)** 設定門檻的標的。")
-    # 🛠️ 修改 2：將 def_wr_l_t 從 -80.0 改為 -60.0
     def_wr_s_t, def_wr_l_t = -90.0, -60.0
     def_rsi_s_t, def_rsi_l_t = 25.0, 50.0
     def_kd_s_k, def_kd_s_d, def_kd_l_k, def_kd_l_d = 20.0, 20.0, 30.0, 30.0
@@ -264,6 +331,10 @@ if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
             
             status_text.text("掃描完成！")
             
+            # 將結果存入 session_state 以供側邊欄寄信用
+            st.session_state['latest_results'] = results
+            st.session_state['has_scanned'] = True
+            
             if results:
                 st.success(f"🎉 掃描完成！共找到 {len(results)} 檔符合條件的標的：")
                 df_results = pd.DataFrame(results)
@@ -280,3 +351,21 @@ if st.button("🚀 開始掃描", use_container_width=True, type="primary"):
                 )
             else:
                 st.info("💡 掃描完成，目前沒有符合此策略參數的標的。")
+
+# --- 顯示舊有掃描結果 (當重新渲染側邊欄或寄信時) ---
+elif st.session_state['has_scanned']:
+    if st.session_state['latest_results']:
+        st.success(f"ℹ️ 畫面保留上次掃描結果，共找到 {len(st.session_state['latest_results'])} 檔：")
+        df_results = pd.DataFrame(st.session_state['latest_results'])
+        st.dataframe(
+            df_results,
+            column_config={
+                "Yahoo資訊": st.column_config.LinkColumn(
+                    "Yahoo 資訊", display_text="點擊查看 🌐"
+                )
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.info("💡 上次掃描結果為空，沒有符合條件的標的。")
