@@ -1,11 +1,13 @@
 name: 每日自動掃描與發送Email
 
 on:
-  schedule:
-    # 使用 UTC 時間。台灣時間(UTC+8)下午 4:30，對應 UTC 時間為早上 8:30。
-    # 這裡設定每週一到週五的 08:30 (UTC) 執行。
-    - cron: '10 9 * * 1-5'
   workflow_dispatch: # 加上這個可以讓您在 GitHub 網頁上手動點擊執行測試
+  schedule:
+    # 第一個時間：早上 08:20 (台灣時間) = UTC 00:20
+    - cron: '20 0 * * 1-5'
+    
+    # 第二個時間：下午 15:20 (台灣時間) = UTC 07:20
+    - cron: '20 7 * * 1-5'
 
 jobs:
   build_and_scan:
