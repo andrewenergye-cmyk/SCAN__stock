@@ -17,9 +17,9 @@
     },
     "overbought": {
         "wr_s_d": 7,
-        "wr_s_t": -10.0,
+        "wr_s_t": -5.0,
         "wr_l_d": 30,
-        "wr_l_t": -20.0,
+        "wr_l_t": -10.0,
         "rsi_s_d": 4,
         "rsi_s_t": 80.0,
         "rsi_l_d": 30,
