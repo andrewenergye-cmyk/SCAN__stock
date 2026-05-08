@@ -116,8 +116,8 @@ def get_secret(key):
     try: return st.secrets[key]
     except: return None
 
-def send_results_email(results_list):
-    """將目前的掃描結果發送至設定的信箱"""
+def send_results_email(results_list, is_oversold):
+    """將目前的掃描結果發送至設定的信箱 (加入超買/超賣區分)"""
     sender_email = get_secret("SENDER_EMAIL")
     app_password = get_secret("APP_PASSWORD")
     receiver_email = get_secret("RECEIVER_EMAIL")
@@ -125,11 +125,14 @@ def send_results_email(results_list):
     if not sender_email or not app_password or not receiver_email:
         return False, "❌ Email 環境變數未設定。"
 
+    # 💡 判斷文字標籤
+    mode_text = "超賣 (逢低買進)" if is_oversold else "超買 (逢高賣出)"
     end_date = datetime.date.today()
+    
     if not results_list:
-        html_content = "<h3>量化掃描完成</h3><p>本次掃描無符合條件標的。</p>"
+        html_content = f"<h3>【{mode_text}】量化掃描完成</h3><p>本次掃描無符合條件標的。</p>"
     else:
-        html_content = f"<h3>掃描完成，共 {len(results_list)} 檔符合條件：</h3><ul>"
+        html_content = f"<h3>【{mode_text}】掃描完成，共 {len(results_list)} 檔符合條件：</h3><ul>"
         for res in results_list:
             html_content += f"<li><b>{res['代號']} {res['名稱']}</b> - 收盤: {res['收盤價']} | 短W%R: {res['短W%R']} | 長W%R: {res['長W%R']}</li>"
         html_content += "</ul><br><p>查看 Yahoo 股市：</p><ul>"
@@ -139,7 +142,9 @@ def send_results_email(results_list):
 
     receiver_list = [e.strip() for e in receiver_email.split(",")]
     msg = MIMEMultipart("alternative")
-    msg['Subject'] = f"📈 策略掃描報告 ({end_date.strftime('%Y-%m-%d')})"
+    
+    # 💡 信件標題加入模式文字
+    msg['Subject'] = f"📈 策略掃描報告 - {mode_text} ({end_date.strftime('%Y-%m-%d')})"
     msg['From'] = sender_email
     msg['To'] = receiver_email
     msg.attach(MIMEText(html_content, 'html'))
@@ -149,7 +154,7 @@ def send_results_email(results_list):
         server.login(sender_email, app_password)
         server.sendmail(sender_email, receiver_list, msg.as_string())
         server.quit()
-        return True, "✅ 信件發送成功！"
+        return True, f"✅ 【{mode_text}】信件發送成功！"
     except Exception as e:
         return False, f"❌ 寄信失敗: {e}"
 
@@ -186,7 +191,7 @@ with st.sidebar:
         if not st.session_state['scanned']: st.warning("請先執行掃描。")
         else:
             with st.spinner('發送中...'):
-                ok, m = send_results_email(st.session_state['results'])
+                ok, m = send_results_email(st.session_state['results'], is_oversold)
                 if ok:
                     st.success(m)
                 else:
