@@ -220,7 +220,7 @@ if st.button(f"💾 儲存【{'超賣' if is_oversold else '超買'}】參數並
         "kd_s_d": int(kd_s_d), "kd_s_k": float(kd_s_k), "kd_s_d_th": float(kd_s_d_th),
         "kd_l_d": int(kd_l_d), "kd_l_k": float(kd_l_k), "kd_l_d_th": float(kd_l_d_th)
     }
-      with st.spinner("同步中..."):
+with st.spinner("同步中..."):
         ok, msg = save_config_to_github(current_config)
         if ok:
             st.success(msg)
