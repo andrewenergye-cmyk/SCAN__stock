@@ -140,13 +140,18 @@ def send_results_email(results_list, is_oversold):
             html_content += f'<li><a href="{res["Yahoo資訊"]}">{res["代號"]} 資訊</a></li>'
         html_content += "</ul>"
 
-    receiver_list = [e.strip() for e in receiver_email.split(",")]
-    msg = MIMEMultipart("alternative")
+# 1. 強制把全形逗號、分號都換成標準半形逗號
+    clean_receivers = receiver_email.replace("，", ",").replace(";", ",")
     
-    # 💡 信件標題加入模式文字
+    # 2. 切割並去除多餘空白，且自動過濾掉空字串
+    receiver_list = [e.strip() for e in clean_receivers.split(",") if e.strip()]
+    
+    msg = MIMEMultipart("alternative")
     msg['Subject'] = f"📈 策略掃描報告 - {mode_text} ({end_date.strftime('%Y-%m-%d')})"
     msg['From'] = sender_email
-    msg['To'] = receiver_email
+    
+    # 3. 把乾淨的陣列重新用逗號組合成標準格式
+    msg['To'] = ", ".join(receiver_list)
     msg.attach(MIMEText(html_content, 'html'))
 
     try:
