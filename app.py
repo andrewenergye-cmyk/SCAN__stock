@@ -126,7 +126,7 @@ def send_results_email(results_list, is_oversold):
         return False, "❌ Email 環境變數未設定。"
 
     # 💡 判斷文字標籤
-    mode_text = "超賣 (逢低買進)" if is_oversold else "超買 (逢高賣出)"
+    mode_text = "超賣 (逢低/弱勢)" if is_oversold else "超買 (逢高/強勢)"
     end_date = datetime.date.today()
     
     if not results_list:
@@ -147,7 +147,7 @@ def send_results_email(results_list, is_oversold):
     receiver_list = [e.strip() for e in clean_receivers.split(",") if e.strip()]
     
     msg = MIMEMultipart("alternative")
-    msg['Subject'] = f"📈 策略掃描報告 - {mode_text} ({end_date.strftime('%Y-%m-%d')})"
+    msg['Subject'] = f"📈 策略掃描報告by臣 - {mode_text} ({end_date.strftime('%Y-%m-%d')})"
     msg['From'] = sender_email
     
     # 3. 把乾淨的陣列重新用逗號組合成標準格式
