@@ -6,6 +6,48 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import json
+from github import Github # 新增套件
+
+CONFIG_FILE = "strategy_config.json"
+
+# ==========================================
+# 設定檔讀寫函式
+# ==========================================
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                return json.load(f)
+        except: pass
+    return {}
+
+def save_config_to_github(new_config):
+    # 1. 本機存一份
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(new_config, f, indent=4)
+        
+    # 2. 嘗試同步到 GitHub
+    token = st.secrets.get("GITHUB_TOKEN")
+    repo_name = st.secrets.get("REPO_NAME")
+    
+    if not token or not repo_name:
+        return False, "⚠️ 參數已暫存本機。若要同步至自動掃描系統，請在 Secrets 設定 GITHUB_TOKEN 與 REPO_NAME。"
+        
+    try:
+        g = Github(token)
+        repo = g.get_repo(repo_name)
+        try:
+            contents = repo.get_contents(CONFIG_FILE)
+            repo.update_file(contents.path, "Streamlit 自動更新策略參數", json.dumps(new_config, indent=4), contents.sha)
+        except:
+            repo.create_file(CONFIG_FILE, "建立策略參數檔", json.dumps(new_config, indent=4))
+        return True, "✅ 參數已成功同步至 GitHub！明日的自動掃描將套用新策略。"
+    except Exception as e:
+        return False, f"❌ GitHub 同步失敗: {e}"
+
+# --- 讀取最新設定 ---
+current_config = load_config()
 
 # ==========================================
 # 核心指標計算函式
@@ -87,7 +129,6 @@ def send_results_email(results_list):
 # 網頁介面與邏輯 (Streamlit)
 # ==========================================
 st.set_page_config(page_title="多指標量化掃描工具", layout="wide", page_icon="📈")
-
 st.title("📈 多指標(W%R/RSI/KD)量化掃描工具by峰臣")
 st.markdown("將您的 CSV 股票清單上傳，系統將自動套用您的策略進行雲端運算。若未上傳，將自動載入預設清單。")
 
@@ -134,48 +175,54 @@ with st.sidebar:
 # --- 主畫面：參數設定區 ---
 st.subheader("📊 4. 參數設定")
 
-if is_oversold:
-    st.info("目前為 **模式 A (超賣)**：尋找指標 **小於(<)** 設定門檻的標的。")
-    def_wr_s_t, def_wr_l_t = -90.0, -60.0
-    def_rsi_s_t, def_rsi_l_t = 25.0, 50.0
-    def_kd_s_k, def_kd_s_d, def_kd_l_k, def_kd_l_d = 20.0, 20.0, 30.0, 30.0
-else:
-    st.error("目前為 **模式 B (超買)**：尋找指標 **大於(>)** 設定門檻的標的。")
-    def_wr_s_t, def_wr_l_t = -10.0, -20.0
-    def_rsi_s_t, def_rsi_l_t = 80.0, 50.0
-    def_kd_s_k, def_kd_s_d, def_kd_l_k, def_kd_l_d = 80.0, 80.0, 70.0, 70.0
-
 col_wr, col_rsi, col_kd = st.columns(3)
 
 with col_wr:
     with st.expander("威廉指標 (W%R)", expanded=True):
-        wr_s_d = st.number_input("短天期", value=7, step=1)
-        wr_s_t = st.number_input("短天期門檻", value=def_wr_s_t, step=1.0)
+        wr_s_d = st.number_input("短天期", value=current_config.get("wr_s_d", 7), step=1)
+        wr_s_t = st.number_input("短天期門檻", value=current_config.get("wr_s_t", -90.0), step=1.0)
         st.divider()
-        wr_l_d = st.number_input("長天期", value=30, step=1)
-        wr_l_t = st.number_input("長天期門檻", value=def_wr_l_t, step=1.0)
+        wr_l_d = st.number_input("長天期", value=current_config.get("wr_l_d", 30), step=1)
+        wr_l_t = st.number_input("長天期門檻", value=current_config.get("wr_l_t", -60.0), step=1.0)
 
 with col_rsi:
     with st.expander("相對強弱指標 (RSI)", expanded=True):
-        rsi_s_d = st.number_input("RSI 短天期", value=4, step=1)
-        rsi_s_t = st.number_input("RSI 短天期門檻", value=def_rsi_s_t, step=1.0)
+        rsi_s_d = st.number_input("RSI 短天期", value=current_config.get("rsi_s_d", 4), step=1)
+        rsi_s_t = st.number_input("RSI 短天期門檻", value=current_config.get("rsi_s_t", 25.0), step=1.0)
         st.divider()
-        rsi_l_d = st.number_input("RSI 長天期", value=15 if is_oversold else 30, step=1)
-        rsi_l_t = st.number_input("RSI 長天期門檻", value=def_rsi_l_t, step=1.0)
+        rsi_l_d = st.number_input("RSI 長天期", value=current_config.get("rsi_l_d", 15), step=1)
+        rsi_l_t = st.number_input("RSI 長天期門檻", value=current_config.get("rsi_l_t", 50.0), step=1.0)
 
 with col_kd:
     with st.expander("隨機指標 (KD)", expanded=True):
-        kd_s_d = st.number_input("KD 短天期", value=9, step=1)
+        kd_s_d = st.number_input("KD 短天期", value=current_config.get("kd_s_d", 9), step=1)
         k_col1, k_col2 = st.columns(2)
-        kd_s_k = k_col1.number_input("短K門檻", value=def_kd_s_k, step=1.0)
-        kd_s_d_th = k_col2.number_input("短D門檻", value=def_kd_s_d, step=1.0)
+        kd_s_k = k_col1.number_input("短K門檻", value=current_config.get("kd_s_k", 20.0), step=1.0)
+        kd_s_d_th = k_col2.number_input("短D門檻", value=current_config.get("kd_s_d_th", 20.0), step=1.0)
         st.divider()
-        kd_l_d = st.number_input("KD 長天期", value=30, step=1)
+        kd_l_d = st.number_input("KD 長天期", value=current_config.get("kd_l_d", 30), step=1)
         l_col1, l_col2 = st.columns(2)
-        kd_l_k = l_col1.number_input("長K門檻", value=def_kd_l_k, step=1.0)
-        kd_l_d_th = l_col2.number_input("長D門檻", value=def_kd_l_d, step=1.0)
+        kd_l_k = l_col1.number_input("長K門檻", value=current_config.get("kd_l_k", 30.0), step=1.0)
+        kd_l_d_th = l_col2.number_input("長D門檻", value=current_config.get("kd_l_d_th", 30.0), step=1.0)
 
 st.divider()
+
+# --- 新增：儲存參數按鈕 (放在掃描按鈕上方) ---
+if st.button("💾 將上方參數記憶並設為「自動掃描」預設值", use_container_width=True):
+    new_config = {
+        "wr_s_d": int(wr_s_d), "wr_s_t": float(wr_s_t),
+        "wr_l_d": int(wr_l_d), "wr_l_t": float(wr_l_t),
+        "rsi_s_d": int(rsi_s_d), "rsi_s_t": float(rsi_s_t),
+        "rsi_l_d": int(rsi_l_d), "rsi_l_t": float(rsi_l_t),
+        "kd_s_d": int(kd_s_d), "kd_s_k": float(kd_s_k), "kd_s_d_th": float(kd_s_d_th),
+        "kd_l_d": int(kd_l_d), "kd_l_k": float(kd_l_k), "kd_l_d_th": float(kd_l_d_th)
+    }
+    with st.spinner("正在將參數同步至 GitHub..."):
+        success, msg = save_config_to_github(new_config)
+        if success:
+            st.success(msg)
+        else:
+            st.warning(msg)
 
 # ==========================================
 # 掃描執行區
