@@ -131,12 +131,12 @@ def main():
     # ==========================================
     # 5. 寄發 Email 邏輯
     # ==========================================
-    html_content = f"<h2>📈 每日台股量化掃描通報 ({date_str})</h2>"
+    html_content = f"<h2>📈 每日台股自動掃描通報by臣 ({date_str})</h2>"
     
-    html_content += "<h3 style='color: green;'>🟢 超賣 (逢低買進) 符合標的：</h3>"
+    html_content += "<h3 style='color: green;'>🟢 30日超賣 (波段低) 符合標的：</h3>"
     html_content += f"<ul>{''.join(os_results)}</ul>" if os_results else "<p>今日無符合條件標的。</p>"
     html_content += "<hr>"
-    html_content += "<h3 style='color: red;'>🔴 超買 (逢高賣出) 符合標的：</h3>"
+    html_content += "<h3 style='color: red;'>🔴 30日超買 (波段高) 符合標的：</h3>"
     html_content += f"<ul>{''.join(ob_results)}</ul>" if ob_results else "<p>今日無符合條件標的。</p>"
 
     sender_email = os.environ.get("SENDER_EMAIL")
