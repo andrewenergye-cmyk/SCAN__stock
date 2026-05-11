@@ -88,19 +88,56 @@ def main():
             if df.empty or len(df) < 30: continue
             current_price = float(df['Close'].iloc[-1])
 
-            # --- 超賣 ---
-            v_wr_s_os = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(os_wr_s_d)).iloc[-1])
-            v_wr_l_os = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(os_wr_l_d)).iloc[-1])
-            if v_wr_s_os < float(os_wr_s_t) and v_wr_l_os < float(os_wr_l_t):
-                os_results.append(f"<li style='margin-bottom: 8px; font-size: 16px;'><b>{stock['clean']} {stock['name']}</b> ➔ 💰 <b style='color: blue;'>收盤價: {current_price:.2f}</b> | 短W%R: {v_wr_s_os:.2f} | 長W%R: {v_wr_l_os:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
-                sheet_data_to_append.append([date_str, "超賣", stock['clean'], stock['name'], current_price, round(v_wr_s_os, 2), round(v_wr_l_os, 2)])
+            # ==========================================
+            # 💡 雙效偵測：單日達標與連續三日判定
+            # ==========================================
+            # 算出 W%R 序列
+            wr_s_os = calculate_williams_r(df['High'], df['Low'], df['Close'], int(os_wr_s_d))
+            wr_l_os = calculate_williams_r(df['High'], df['Low'], df['Close'], int(os_wr_l_d))
+            
+            wr_s_ob = calculate_williams_r(df['High'], df['Low'], df['Close'], int(ob_wr_s_d))
+            wr_l_ob = calculate_williams_r(df['High'], df['Low'], df['Close'], int(ob_wr_l_d))
 
-            # --- 超買 ---
-            v_wr_s_ob = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(ob_wr_s_d)).iloc[-1])
-            v_wr_l_ob = float(calculate_williams_r(df['High'], df['Low'], df['Close'], int(ob_wr_l_d)).iloc[-1])
-            if v_wr_s_ob > float(ob_wr_s_t) and v_wr_l_ob > float(ob_wr_l_t):
-                ob_results.append(f"<li style='margin-bottom: 8px; font-size: 16px;'><b>{stock['clean']} {stock['name']}</b> ➔ 💰 <b style='color: blue;'>收盤價: {current_price:.2f}</b> | 短W%R: {v_wr_s_ob:.2f} | 長W%R: {v_wr_l_ob:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
-                sheet_data_to_append.append([date_str, "超買", stock['clean'], stock['name'], current_price, round(v_wr_s_ob, 2), round(v_wr_l_ob, 2)])
+            # --- 判斷超賣 (Oversold) ---
+            # 1. 先看「今天」是否達標
+            today_s_os = float(wr_s_os.iloc[-1])
+            today_l_os = float(wr_l_os.iloc[-1])
+            
+            if today_s_os < float(os_wr_s_t) and today_l_os < float(os_wr_l_t):
+                # 2. 如果今天達標，進一步檢查是否「連3日」
+                is_consecutive_3 = False
+                if len(wr_s_os) >= 3:
+                    last_3_s = wr_s_os.iloc[-3:]
+                    last_3_l = wr_l_os.iloc[-3:]
+                    if (last_3_s < float(os_wr_s_t)).all() and (last_3_l < float(os_wr_l_t)).all():
+                        is_consecutive_3 = True
+                
+                # 設定標籤樣式
+                tag = "<span style='background-color: #ffd700; color: #000; padding: 2px 4px; border-radius: 4px; font-size: 11px; font-weight: bold;'>🏆 連3日</span>" if is_consecutive_3 else ""
+                mode_str = "超賣(連3)" if is_consecutive_3 else "超賣"
+                
+                os_results.append(f"<li style='margin-bottom: 8px; font-size: 16px;'><b>{stock['clean']} {stock['name']}</b> {tag} ➔ 💰 <b style='color: blue;'>收盤價: {current_price:.2f}</b> | 短W%R: {today_s_os:.2f} | 長W%R: {today_l_os:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
+                sheet_data_to_append.append([date_str, mode_str, stock['clean'], stock['name'], current_price, round(today_s_os, 2), round(today_l_os, 2)])
+
+            # --- 判斷超買 (Overbought) ---
+            # 1. 先看「今天」是否達標
+            today_s_ob = float(wr_s_ob.iloc[-1])
+            today_l_ob = float(wr_l_ob.iloc[-1])
+            
+            if today_s_ob > float(ob_wr_s_t) and today_l_ob > float(ob_wr_l_t):
+                # 2. 如果今天達標，進一步檢查是否「連3日」
+                is_consecutive_3 = False
+                if len(wr_s_ob) >= 3:
+                    last_3_s = wr_s_ob.iloc[-3:]
+                    last_3_l = wr_l_ob.iloc[-3:]
+                    if (last_3_s > float(ob_wr_s_t)).all() and (last_3_l > float(ob_wr_l_t)).all():
+                        is_consecutive_3 = True
+                
+                tag = "<span style='background-color: #ffd700; color: #000; padding: 2px 4px; border-radius: 4px; font-size: 11px; font-weight: bold;'>🏆 連3日</span>" if is_consecutive_3 else ""
+                mode_str = "超買(連3)" if is_consecutive_3 else "超買"
+                
+                ob_results.append(f"<li style='margin-bottom: 8px; font-size: 16px;'><b>{stock['clean']} {stock['name']}</b> {tag} ➔ 💰 <b style='color: blue;'>收盤價: {current_price:.2f}</b> | 短W%R: {today_s_ob:.2f} | 長W%R: {today_l_ob:.2f} <a href='https://tw.stock.yahoo.com/quote/{stock['clean']}'>[Yahoo資訊]</a></li>")
+                sheet_data_to_append.append([date_str, mode_str, stock['clean'], stock['name'], current_price, round(today_s_ob, 2), round(today_l_ob, 2)])
 
         except Exception as e: pass
 
