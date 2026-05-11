@@ -2,3 +2,5 @@ streamlit
 yfinance
 pandas
 PyGithub
+gspread
+google-auth
