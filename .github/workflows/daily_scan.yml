@@ -6,7 +6,7 @@ on:
     # 💡 這裡我先幫您改回標準的下午 16:30 (台灣時間)
     # 如果您想測試，可以自行修改為未來的時間
     - cron: '18 22 * * 1-5'
-    - cron: '38 8 * * 1-5'
+    - cron: '38 4 * * 1-5'
 jobs:
   build_and_scan:
     runs-on: ubuntu-latest
